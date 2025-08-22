@@ -12,3 +12,22 @@ services:
     ports:
       - "3123:3123"
     entrypoint: ["node", "dist/index.js"]
+    depends_on:
+      - piper-tts
+    networks:
+      - short-video-network
+
+  piper-tts:
+    build:
+      context: .
+      dockerfile: piper.Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./models:/app/models
+    networks:
+      - short-video-network
+
+networks:
+  short-video-network:
+    driver: bridge 

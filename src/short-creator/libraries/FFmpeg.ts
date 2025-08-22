@@ -5,8 +5,9 @@ import { logger } from "../../logger";
 export class FFMpeg {
   static async init(): Promise<FFMpeg> {
     return import("@ffmpeg-installer/ffmpeg").then((ffmpegInstaller) => {
-      ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-      logger.info("FFmpeg path set to:", ffmpegInstaller.path);
+      const ffmpegPath = ffmpegInstaller.path as string;
+      ffmpeg.setFfmpegPath(ffmpegPath);
+      logger.info("FFmpeg path set to: " + ffmpegPath);
       return new FFMpeg();
     });
   }
