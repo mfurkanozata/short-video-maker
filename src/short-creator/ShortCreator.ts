@@ -134,7 +134,7 @@ export class ShortCreator {
       tempFiles.push(tempWavPath, tempMp3Path);
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
-      const captions = await this.whisper.CreateCaption(tempWavPath);
+      const captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
       const video = await this.pexelsApi.findVideo(

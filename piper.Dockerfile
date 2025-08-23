@@ -14,7 +14,7 @@ COPY requirements-piper.txt .
 RUN pip install --no-cache-dir -r requirements-piper.txt
 
 # Copy Piper TTS server
-COPY piper_server.py .
+COPY piper_server_simple.py ./piper_server.py
 
 # Create models directory and download Turkish model
 RUN mkdir -p models && \

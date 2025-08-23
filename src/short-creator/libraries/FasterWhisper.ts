@@ -168,7 +168,7 @@ export class FasterWhisper {
     throw error;
   }
 
-  async CreateCaption(audioPath: string): Promise<Caption[]> {
+  async CreateCaption(audioPath: string, originalText?: string): Promise<Caption[]> {
     logger.debug({ audioPath }, "Starting to transcribe audio with Faster-Whisper");
 
     try {
@@ -178,10 +178,16 @@ export class FasterWhisper {
         audioPath, 
         segmentCount: transcriptionResult.segments.length,
         language: transcriptionResult.language,
-        duration: transcriptionResult.duration
+        duration: transcriptionResult.duration,
+        hasOriginalText: !!originalText
       }, "Faster-Whisper transcription finished, creating captions");
 
       const captions: Caption[] = [];
+
+      // If original text is provided, use hybrid approach (correct text + timing)
+      if (originalText) {
+        return this.createHybridCaptions(transcriptionResult, originalText);
+      }
 
       // Process segments and create captions with word-level timing
       transcriptionResult.segments.forEach((segment) => {
@@ -270,5 +276,92 @@ export class FasterWhisper {
     }
 
     return optimized;
+  }
+
+  private createHybridCaptions(transcriptionResult: any, originalText: string): Caption[] {
+    logger.debug({ originalText, transcriptionDuration: transcriptionResult.duration }, "Creating hybrid captions with original text and timing");
+
+    // Clean and prepare original text
+    const cleanOriginalText = originalText.trim();
+    const originalWords = cleanOriginalText.split(/\s+/).filter(word => word.length > 0);
+    
+    // Extract timing information from transcription
+    const timingSegments: Array<{start: number, end: number, text: string}> = [];
+    
+    transcriptionResult.segments.forEach((segment: any) => {
+      if (segment.words && segment.words.length > 0) {
+        segment.words.forEach((word: any) => {
+          if (word.word && word.word.trim()) {
+            timingSegments.push({
+              start: word.start,
+              end: word.end,
+              text: word.word.trim()
+            });
+          }
+        });
+      } else {
+        // Fallback: segment-level timing
+        const words = segment.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
+        const segmentDuration = segment.end - segment.start;
+        const wordDuration = segmentDuration / words.length;
+        
+        words.forEach((word: string, index: number) => {
+          timingSegments.push({
+            start: segment.start + (index * wordDuration),
+            end: segment.start + ((index + 1) * wordDuration),
+            text: word
+          });
+        });
+      }
+    });
+
+    logger.debug({ 
+      originalWordCount: originalWords.length, 
+      timingSegmentCount: timingSegments.length 
+    }, "Aligning original text with timing segments");
+
+    const captions: Caption[] = [];
+    
+    // Strategy 1: If word counts match, direct alignment
+    if (originalWords.length === timingSegments.length) {
+      originalWords.forEach((word: string, index: number) => {
+        const timing = timingSegments[index];
+        captions.push({
+          text: ` ${word}`, // Add space for natural reading
+          startMs: Math.round(timing.start * 1000),
+          endMs: Math.round(timing.end * 1000),
+        });
+      });
+    } 
+    // Strategy 2: Proportional timing distribution
+    else {
+      const totalDuration = transcriptionResult.duration;
+      const wordDuration = totalDuration / originalWords.length;
+      
+      originalWords.forEach((word: string, index: number) => {
+        const startTime = index * wordDuration;
+        const endTime = (index + 1) * wordDuration;
+        
+        captions.push({
+          text: ` ${word}`,
+          startMs: Math.round(startTime * 1000),
+          endMs: Math.round(endTime * 1000),
+        });
+      });
+      
+      logger.debug({ strategy: "proportional", wordDuration }, "Used proportional timing distribution");
+    }
+
+    // Filter out very short captions (less than 100ms)
+    const filteredCaptions = captions.filter(caption => 
+      (caption.endMs - caption.startMs) >= 100
+    );
+
+    logger.debug({ 
+      originalCaptionCount: captions.length, 
+      filteredCaptionCount: filteredCaptions.length 
+    }, "Hybrid captions created");
+
+    return filteredCaptions;
   }
 }

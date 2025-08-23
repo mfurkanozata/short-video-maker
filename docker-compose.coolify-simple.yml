@@ -38,7 +38,7 @@ services:
     environment:
       - PEXELS_API_KEY=${PEXELS_API_KEY}
       - LANGUAGE=${LANGUAGE:-tr}
-      - WHISPER_MODEL=${WHISPER_MODEL:-large-v3}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
       - DOCKER=true
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - CONCURRENCY=${CONCURRENCY:-1}

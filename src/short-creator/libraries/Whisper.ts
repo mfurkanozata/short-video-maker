@@ -44,7 +44,7 @@ export class Whisper {
   }
 
   // todo shall we extract it to a Caption class?
-  async CreateCaption(audioPath: string): Promise<Caption[]> {
+  async CreateCaption(audioPath: string, originalText?: string): Promise<Caption[]> {
     logger.debug({ audioPath }, "Starting to transcribe audio");
     const { transcription } = await transcribe({
       model: this.config.whisperModel,
