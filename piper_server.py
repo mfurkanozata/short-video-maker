@@ -49,14 +49,18 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
 
             text = data.get('text', '')
             voice_model = data.get('voice', 'tr_TR-dfki-medium')
+            speaker_id = data.get('speaker_id', 0)
+            length_scale = data.get('length_scale', 1.0)  # Speech speed control
+            noise_scale = data.get('noise_scale', 0.667)  # Add naturalness
+            noise_w = data.get('noise_w', 0.8)  # Prosody variation
 
-            print(f"Processing TTS request: text='{text}', voice='{voice_model}'")
+            print(f"Processing enhanced TTS request: text='{text}', voice='{voice_model}', length_scale={length_scale}, noise_scale={noise_scale}, noise_w={noise_w}")
 
             if not text:
                 self.send_error(400, "Text is required")
                 return
 
-            audio_data = self.generate_audio(text, voice_model)
+            audio_data = self.generate_audio(text, voice_model, speaker_id, length_scale, noise_scale, noise_w)
 
             if audio_data:
                 self.send_response(200)
@@ -74,7 +78,7 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send_error(500, f"Internal Server Error: {str(e)}")
 
-    def generate_audio(self, text, voice_model):
+    def generate_audio(self, text, voice_model, speaker_id=0, length_scale=1.0, noise_scale=0.667, noise_w=0.8):
         try:
             if self.voice is None:
                 model_path = f"./models/{voice_model}.onnx"
@@ -87,9 +91,19 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                 self.voice = PiperVoice.load(model_path, config_path)
                 print(f"Voice model loaded: {voice_model}")
 
-            # Try modern API: returns iterable of AudioChunk
+            print(f"Generating audio with enhanced parameters: length_scale={length_scale}, noise_scale={noise_scale}, noise_w={noise_w}")
+
+            # Try modern API with enhanced parameters: returns iterable of AudioChunk
             try:
-                audio_chunks = self.voice.synthesize(text)
+                # Use enhanced synthesis parameters for more natural speech
+                audio_chunks = self.voice.synthesize(
+                    text, 
+                    speaker_id=speaker_id,
+                    length_scale=length_scale,  # Controls speech speed (1.0 = normal, >1.0 = slower)
+                    noise_scale=noise_scale,    # Controls randomness for naturalness (0.667 = good balance)
+                    noise_w=noise_w            # Controls prosody variation (0.8 = natural variation)
+                )
+                
                 # Ensure it's iterable and not None
                 if audio_chunks is None:
                     raise TypeError("synthesize returned None")
@@ -117,9 +131,9 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                     16, 1, channels, sample_rate, sample_rate * channels * 2, 2 * channels, 16,
                     b'data', data_length)
                 return wav_header + raw_audio_data
-            except TypeError as e:
-                # Legacy API: requires a wave.Wave_write as wav_file
-                print(f"Modern synthesize API failed ({e}); trying legacy wav_file API")
+            except (TypeError, AttributeError) as e:
+                # Legacy API: requires a wave.Wave_write as wav_file (may not support enhanced parameters)
+                print(f"Modern enhanced synthesize API failed ({e}); trying legacy wav_file API")
                 import tempfile
                 import wave
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
@@ -127,7 +141,20 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                 try:
                     wav_writer = wave.open(temp_wav_path, 'wb')
                     try:
-                        self.voice.synthesize(text, wav_writer)
+                        # Try legacy API with parameters if supported
+                        try:
+                            self.voice.synthesize(
+                                text, 
+                                wav_writer,
+                                speaker_id=speaker_id,
+                                length_scale=length_scale,
+                                noise_scale=noise_scale,
+                                noise_w=noise_w
+                            )
+                        except TypeError:
+                            # Fallback to basic legacy API without enhanced parameters
+                            print("Legacy API doesn't support enhanced parameters, using basic synthesis")
+                            self.voice.synthesize(text, wav_writer)
                     finally:
                         wav_writer.close()
                     with open(temp_wav_path, 'rb') as f:

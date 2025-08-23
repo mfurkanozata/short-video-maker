@@ -4,7 +4,7 @@ import fs from "fs-extra";
 
 import { Kokoro } from "./short-creator/libraries/Kokoro";
 import { Remotion } from "./short-creator/libraries/Remotion";
-import { Whisper } from "./short-creator/libraries/Whisper";
+import { FasterWhisper } from "./short-creator/libraries/FasterWhisper";
 import { FFMpeg } from "./short-creator/libraries/FFmpeg";
 import { PexelsAPI } from "./short-creator/libraries/Pexels";
 import { Config } from "./config";
@@ -35,8 +35,8 @@ async function main() {
   const remotion = await Remotion.init(config);
   logger.debug("initializing kokoro");
   const kokoro = await Kokoro.init(config.kokoroModelPrecision, config.language);
-  logger.debug("initializing whisper");
-  const whisper = await Whisper.init(config);
+  logger.debug("initializing faster-whisper");
+  const whisper = await FasterWhisper.init(config);
   logger.debug("initializing ffmpeg");
   const ffmpeg = await FFMpeg.init();
   const pexelsApi = new PexelsAPI(config.pexelsApiKey);

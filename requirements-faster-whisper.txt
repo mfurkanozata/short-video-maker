@@ -1,0 +1,9 @@
+# Faster-Whisper for high-performance transcription
+faster-whisper>=1.0.0
+
+# Core dependencies
+numpy>=1.21.0
+torch>=1.9.0
+
+# CTranslate2 backend (automatically installed with faster-whisper)
+ctranslate2>=3.20.0

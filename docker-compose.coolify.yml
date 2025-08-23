@@ -1,4 +1,26 @@
 services:
+  faster-whisper:
+    build:
+      context: .
+      dockerfile: faster-whisper.Dockerfile
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - short-video-network
+    volumes:
+      - faster_whisper_models:/app/models
+      - video_data:/app/data  # Shared volume for audio files
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5002/health || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    labels:
+      - "coolify.managed=true"
+      - "coolify.name=faster-whisper"
+
   piper-tts:
     build:
       context: .
@@ -28,7 +50,7 @@ services:
     environment:
       - PEXELS_API_KEY=${PEXELS_API_KEY}
       - LANGUAGE=${LANGUAGE:-tr}
-      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - WHISPER_MODEL=${WHISPER_MODEL:-large-v3}
       - DOCKER=true
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CONCURRENCY=${CONCURRENCY:-1}
@@ -40,6 +62,8 @@ services:
     depends_on:
       piper-tts:
         condition: service_started
+      faster-whisper:
+        condition: service_healthy
     networks:
       - short-video-network
     volumes:
@@ -66,6 +90,10 @@ volumes:
     labels:
       - "coolify.managed=true"
   piper_models:
+    driver: local
+    labels:
+      - "coolify.managed=true"
+  faster_whisper_models:
     driver: local
     labels:
       - "coolify.managed=true"

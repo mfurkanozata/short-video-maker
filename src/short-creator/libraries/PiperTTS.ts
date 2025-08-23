@@ -5,6 +5,10 @@ export interface PiperTTSOptions {
   text: string;
   voice?: string;
   serverUrl?: string;
+  speakingRate?: number;
+  lengthScale?: number;
+  noiseScale?: number;
+  noiseW?: number;
 }
 
 export class PiperTTS {
@@ -20,31 +24,91 @@ export class PiperTTS {
     ];
   }
 
+  private enhanceTextForNaturalSpeech(text: string): string {
+    // Add natural pauses after sentences and punctuation
+    let enhancedText = text
+      // Add longer pause after sentences
+      .replace(/([.!?])\s+/g, '$1... ')
+      // Add medium pause after commas
+      .replace(/,\s+/g, ', ')
+      // Add short pause after colons and semicolons  
+      .replace(/([;:])\s+/g, '$1. ')
+      // Ensure proper spacing around numbers
+      .replace(/(\d+)\s*([a-zA-ZçğıöşüÇĞIİÖŞÜ])/g, '$1 $2');
+
+    // Split into sentences for better prosody
+    const sentences = enhancedText.split(/([.!?])/);
+    const processedSentences = [];
+    
+    for (let i = 0; i < sentences.length; i += 2) {
+      const sentence = sentences[i];
+      const punctuation = sentences[i + 1] || '';
+      
+      if (sentence && sentence.trim()) {
+        // Add natural breathing pause between sentences
+        processedSentences.push(sentence.trim() + punctuation + (punctuation ? '...' : ''));
+      }
+    }
+    
+    return processedSentences.join(' ');
+  }
+
   async generateAudio(options: PiperTTSOptions): Promise<ArrayBuffer> {
-    const { text, voice = "tr_TR-dfki-medium" } = options;
-    logger.debug({ text, voice }, "Generating audio with Piper TTS");
+    const { 
+      text, 
+      voice = "tr_TR-dfki-medium",
+      speakingRate = 1.0,
+      lengthScale = 1.1, // Slightly slower for more natural speech
+      noiseScale = 0.667, // Add slight randomness for naturalness
+      noiseW = 0.8 // Slight prosody variation
+    } = options;
+    
+    // Enhance text for more natural speech
+    const enhancedText = this.enhanceTextForNaturalSpeech(text);
+    
+    logger.debug({ 
+      originalText: text, 
+      enhancedText, 
+      voice, 
+      speakingRate, 
+      lengthScale 
+    }, "Generating enhanced audio with Piper TTS");
 
     // Try each URL until one works
     for (const url of this.fallbackUrls) {
       try {
         logger.debug({ url }, "Trying Piper TTS server");
         
+        const requestData = {
+          text: enhancedText,
+          voice,
+          speaker_id: 0,
+          length_scale: lengthScale,
+          noise_scale: noiseScale,
+          noise_w: noiseW
+        };
+        
         const response = await axios.post(
           `${url}/tts`,
-          {
-            text,
-            voice,
-          },
+          requestData,
           {
             responseType: "arraybuffer",
-            timeout: 10000, // 10 seconds timeout per attempt
+            timeout: 15000, // Increased timeout for larger models
           }
         );
 
         if (response.status === 200) {
           logger.debug(
-            { text, voice, audioSize: response.data.byteLength, url },
-            "Audio generated successfully with Piper TTS"
+            { 
+              originalText: text,
+              enhancedText, 
+              voice, 
+              audioSize: response.data.byteLength, 
+              url,
+              speakingRate,
+              lengthScale
+            },
+            "Enhanced audio generated successfully with Piper TTS"
           );
           // Update serverUrl to working one for future requests
           this.serverUrl = url;
