@@ -87,33 +87,32 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                 self.voice = PiperVoice.load(model_path, config_path)
                 print(f"Voice model loaded: {voice_model}")
 
-            # Generate audio chunks
-            audio_chunks = list(self.voice.synthesize(text, wav_file=None))
-            print(f"Generated {len(audio_chunks)} audio chunks")
-
-            if not audio_chunks:
-                print("No audio chunks generated")
-                return None
-
-            # Get first chunk (assuming single sentence)
-            chunk = audio_chunks[0]
-            sample_rate = chunk.sample_rate
-            audio_data = chunk.audio_int16_bytes
-            data_length = len(audio_data)
-
-            print(f"Sample rate: {sample_rate}, Audio length: {data_length}")
-
-            # Create WAV header
-            wav_header = struct.pack('<4sI4s4sIHHIIHH4sI',
-                b'RIFF', 36 + data_length, b'WAVE', b'fmt ',
-                16, 1, 1, sample_rate, sample_rate * 2, 2, 16,
-                b'data', data_length)
-
-            # Combine header and audio data
-            audio_data = wav_header + audio_data
-            print(f"WAV file created: {len(audio_data)} bytes")
-
-            return audio_data
+            # For this Piper TTS version, we need to use synthesize_wav
+            # or create a temporary file
+            import tempfile
+            import os
+            
+            # Create temporary WAV file
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+                temp_wav_path = temp_wav.name
+            
+            try:
+                # Use synthesize_wav which writes directly to file
+                self.voice.synthesize_wav(text, temp_wav_path)
+                print(f"Audio written to temporary file: {temp_wav_path}")
+                
+                # Read the generated WAV file
+                with open(temp_wav_path, 'rb') as f:
+                    audio_data = f.read()
+                
+                print(f"WAV file read: {len(audio_data)} bytes")
+                return audio_data
+                
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_wav_path):
+                    os.unlink(temp_wav_path)
+                    print(f"Temporary file cleaned up: {temp_wav_path}")
 
         except Exception as e:
             print(f"Audio generation error: {e}")
