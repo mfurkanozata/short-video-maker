@@ -88,7 +88,7 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                 print(f"Voice model loaded: {voice_model}")
 
             # Generate audio chunks
-            audio_chunks = list(self.voice.synthesize(text))
+            audio_chunks = list(self.voice.synthesize(text, wav_file=None))
             print(f"Generated {len(audio_chunks)} audio chunks")
 
             if not audio_chunks:
