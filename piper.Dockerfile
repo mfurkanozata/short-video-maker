@@ -22,4 +22,4 @@ RUN mkdir -p models
 EXPOSE 5001
 
 # Start Piper TTS server
-CMD ["python", "piper_server.py"]
+CMD ["python", "-u", "piper_server.py"]
