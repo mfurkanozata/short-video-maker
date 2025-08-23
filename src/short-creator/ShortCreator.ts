@@ -146,31 +146,7 @@ export class ShortCreator {
 
       logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
 
-      await new Promise<void>((resolve, reject) => {
-        const fileStream = fs.createWriteStream(tempVideoPath);
-        https
-          .get(video.url, (response: http.IncomingMessage) => {
-            if (response.statusCode !== 200) {
-              reject(
-                new Error(`Failed to download video: ${response.statusCode}`),
-              );
-              return;
-            }
-
-            response.pipe(fileStream);
-
-            fileStream.on("finish", () => {
-              fileStream.close();
-              logger.debug(`Video downloaded successfully to ${tempVideoPath}`);
-              resolve();
-            });
-          })
-          .on("error", (err: Error) => {
-            fs.unlink(tempVideoPath, () => {}); // Delete the file if download failed
-            logger.error(err, "Error downloading video:");
-            reject(err);
-          });
-      });
+      await this.downloadVideoWithRetry(video.url, tempVideoPath, 3);
 
       excludeVideoIds.push(video.id);
 
@@ -293,5 +269,110 @@ export class ShortCreator {
 
   public ListAvailableVoices(): string[] {
     return this.kokoro.listAvailableVoices();
+  }
+
+  private async downloadVideoWithRetry(url: string, filePath: string, retries: number): Promise<void> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        await this.downloadVideoWithValidation(url, filePath);
+        logger.debug(`Video downloaded successfully to ${filePath} on attempt ${attempt}`);
+        return;
+      } catch (error) {
+        logger.warn({ error, attempt, retries }, `Video download attempt ${attempt} failed`);
+        
+        // Clean up failed download
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (cleanupError) {
+          logger.warn({ cleanupError }, "Failed to cleanup incomplete download");
+        }
+
+        if (attempt === retries) {
+          throw new Error(`Failed to download video after ${retries} attempts: ${error}`);
+        }
+
+        // Wait before retry (exponential backoff)
+        const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  private async downloadVideoWithValidation(url: string, filePath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = 30000; // 30 seconds timeout
+      let downloadedBytes = 0;
+      let expectedBytes = 0;
+
+      const fileStream = fs.createWriteStream(filePath);
+      
+      const request = https.get(url, (response: http.IncomingMessage) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download video: ${response.statusCode} ${response.statusMessage}`));
+          return;
+        }
+
+        // Get expected file size
+        const contentLength = response.headers['content-length'];
+        if (contentLength) {
+          expectedBytes = parseInt(contentLength, 10);
+          logger.debug({ expectedBytes, url }, "Starting video download");
+        }
+
+        response.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+        });
+
+        response.pipe(fileStream);
+
+        fileStream.on("finish", () => {
+          fileStream.close();
+          
+          // Validate download completion
+          if (expectedBytes > 0 && downloadedBytes !== expectedBytes) {
+            reject(new Error(`Incomplete download: got ${downloadedBytes} bytes, expected ${expectedBytes}`));
+            return;
+          }
+
+          // Validate file exists and has content
+          try {
+            const stats = fs.statSync(filePath);
+            if (stats.size === 0) {
+              reject(new Error("Downloaded file is empty"));
+              return;
+            }
+            
+            logger.debug({ 
+              filePath, 
+              downloadedBytes, 
+              expectedBytes, 
+              actualSize: stats.size 
+            }, "Video download validation successful");
+            
+            resolve();
+          } catch (statError) {
+            reject(new Error(`Failed to validate downloaded file: ${statError}`));
+          }
+        });
+
+        fileStream.on("error", (error) => {
+          fs.unlink(filePath, () => {});
+          reject(error);
+        });
+      });
+
+      request.setTimeout(timeout, () => {
+        request.destroy();
+        fs.unlink(filePath, () => {});
+        reject(new Error(`Download timeout after ${timeout}ms`));
+      });
+
+      request.on("error", (error) => {
+        fs.unlink(filePath, () => {});
+        reject(error);
+      });
+    });
   }
 }
