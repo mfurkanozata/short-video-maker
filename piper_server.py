@@ -87,32 +87,58 @@ class PiperTTSHandler(BaseHTTPRequestHandler):
                 self.voice = PiperVoice.load(model_path, config_path)
                 print(f"Voice model loaded: {voice_model}")
 
-            # For this Piper TTS version, we need to use synthesize_wav
-            # or create a temporary file
-            import tempfile
-            import os
-            
-            # Create temporary WAV file
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
-                temp_wav_path = temp_wav.name
-            
+            # Try modern API: returns iterable of AudioChunk
             try:
-                # Use synthesize_wav which writes directly to file
-                self.voice.synthesize_wav(text, temp_wav_path)
-                print(f"Audio written to temporary file: {temp_wav_path}")
-                
-                # Read the generated WAV file
-                with open(temp_wav_path, 'rb') as f:
-                    audio_data = f.read()
-                
-                print(f"WAV file read: {len(audio_data)} bytes")
-                return audio_data
-                
-            finally:
-                # Clean up temporary file
-                if os.path.exists(temp_wav_path):
-                    os.unlink(temp_wav_path)
-                    print(f"Temporary file cleaned up: {temp_wav_path}")
+                audio_chunks = self.voice.synthesize(text)
+                # Ensure it's iterable and not None
+                if audio_chunks is None:
+                    raise TypeError("synthesize returned None")
+                raw_audio_data = b''
+                sample_rate = 22050
+                channels = 1
+                count = 0
+                for i, chunk in enumerate(audio_chunks):
+                    count += 1
+                    if hasattr(chunk, 'audio_int16_bytes'):
+                        raw_audio_data += chunk.audio_int16_bytes
+                        if i == 0 and hasattr(chunk, 'sample_rate'):
+                            sample_rate = chunk.sample_rate
+                            channels = getattr(chunk, 'sample_channels', 1)
+                    else:
+                        print(f"Chunk {i} missing audio_int16_bytes, stopping")
+                        break
+                if count == 0 or not raw_audio_data:
+                    print("No chunks or empty audio from modern API; falling back")
+                    raise TypeError("empty audio from iterable API")
+                # Build WAV header and return
+                data_length = len(raw_audio_data)
+                wav_header = struct.pack('<4sI4s4sIHHIIHH4sI',
+                    b'RIFF', 36 + data_length, b'WAVE', b'fmt ',
+                    16, 1, channels, sample_rate, sample_rate * channels * 2, 2 * channels, 16,
+                    b'data', data_length)
+                return wav_header + raw_audio_data
+            except TypeError as e:
+                # Legacy API: requires a wave.Wave_write as wav_file
+                print(f"Modern synthesize API failed ({e}); trying legacy wav_file API")
+                import tempfile
+                import wave
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+                    temp_wav_path = temp_wav.name
+                try:
+                    wav_writer = wave.open(temp_wav_path, 'wb')
+                    try:
+                        self.voice.synthesize(text, wav_writer)
+                    finally:
+                        wav_writer.close()
+                    with open(temp_wav_path, 'rb') as f:
+                        audio_data = f.read()
+                    print(f"Legacy API produced WAV bytes: {len(audio_data)}")
+                    return audio_data
+                finally:
+                    try:
+                        os.unlink(temp_wav_path)
+                    except Exception:
+                        pass
 
         except Exception as e:
             print(f"Audio generation error: {e}")
