@@ -10,7 +10,8 @@ export class Kokoro {
   private piperTTS: PiperTTS;
 
   constructor(private language: string = "en") {
-    this.piperTTS = new PiperTTS();
+    const url = process.env.PIPER_TTS_URL || "http://piper-tts:5001";
+    this.piperTTS = new PiperTTS(url);
   }
 
   async generate(
