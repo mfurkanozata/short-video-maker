@@ -1,0 +1,75 @@
+services:
+  piper-tts:
+    build:
+      context: .
+      dockerfile: piper.Dockerfile
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - short-video-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - piper_models:/app/models
+    labels:
+      - "coolify.managed=true"
+      - "coolify.name=piper-tts"
+
+  short-creator:
+    build:
+      context: .
+      dockerfile: main.Dockerfile
+    restart: unless-stopped
+    environment:
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - LANGUAGE=${LANGUAGE:-tr}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - DOCKER=true
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CONCURRENCY=${CONCURRENCY:-1}
+      - VIDEO_CACHE_SIZE_IN_BYTES=${VIDEO_CACHE_SIZE_IN_BYTES:-2097152000}
+      - PIPER_TTS_URL=http://piper-tts:5001
+      - NODE_ENV=production
+    ports:
+      - "3123:3123"
+    depends_on:
+      piper-tts:
+        condition: service_healthy
+    networks:
+      - short-video-network
+    volumes:
+      - video_data:/app/data
+      - whisper_models:/app/data/libs/whisper
+    labels:
+      - "coolify.managed=true"
+      - "coolify.name=short-creator"
+      - "coolify.port=3123"
+      - "traefik.enable=true"
+      - "traefik.http.routers.short-creator.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.short-creator.entrypoints=websecure"
+      - "traefik.http.routers.short-creator.tls.certresolver=letsencrypt"
+      - "traefik.http.services.short-creator.loadbalancer.server.port=3123"
+
+networks:
+  short-video-network:
+    driver: bridge
+    name: short-video-network
+
+volumes:
+  video_data:
+    driver: local
+    labels:
+      - "coolify.managed=true"
+  piper_models:
+    driver: local
+    labels:
+      - "coolify.managed=true"
+  whisper_models:
+    driver: local
+    labels:
+      - "coolify.managed=true"

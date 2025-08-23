@@ -9,42 +9,57 @@ export interface PiperTTSOptions {
 
 export class PiperTTS {
   private serverUrl: string;
+  private fallbackUrls: string[];
 
   constructor(serverUrl: string = "http://piper-tts:5001") {
     this.serverUrl = serverUrl;
+    this.fallbackUrls = [
+      "http://piper-tts:5001",
+      "http://localhost:5001",
+      "http://127.0.0.1:5001"
+    ];
   }
 
   async generateAudio(options: PiperTTSOptions): Promise<ArrayBuffer> {
-    try {
-      const { text, voice = "tr_TR-dfki-medium" } = options;
+    const { text, voice = "tr_TR-dfki-medium" } = options;
+    logger.debug({ text, voice }, "Generating audio with Piper TTS");
 
-      logger.debug({ text, voice }, "Generating audio with Piper TTS");
-
-      const response = await axios.post(
-        `${this.serverUrl}/tts`,
-        {
-          text,
-          voice,
-        },
-        {
-          responseType: "arraybuffer",
-          timeout: 30000, // 30 seconds timeout
-        }
-      );
-
-      if (response.status === 200) {
-        logger.debug(
-          { text, voice, audioSize: response.data.byteLength },
-          "Audio generated successfully with Piper TTS"
+    // Try each URL until one works
+    for (const url of this.fallbackUrls) {
+      try {
+        logger.debug({ url }, "Trying Piper TTS server");
+        
+        const response = await axios.post(
+          `${url}/tts`,
+          {
+            text,
+            voice,
+          },
+          {
+            responseType: "arraybuffer",
+            timeout: 10000, // 10 seconds timeout per attempt
+          }
         );
-        return response.data;
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        if (response.status === 200) {
+          logger.debug(
+            { text, voice, audioSize: response.data.byteLength, url },
+            "Audio generated successfully with Piper TTS"
+          );
+          // Update serverUrl to working one for future requests
+          this.serverUrl = url;
+          return response.data;
+        }
+      } catch (error: any) {
+        logger.warn({ error: error.message, url }, "Failed to connect to Piper TTS server, trying next URL");
+        continue;
       }
-    } catch (error) {
-      logger.error({ error, options }, "Error generating audio with Piper TTS");
-      throw error;
     }
+
+    // If all URLs failed, throw error
+    const error = new Error(`All Piper TTS servers failed. Tried: ${this.fallbackUrls.join(', ')}`);
+    logger.error({ error, options }, "Error generating audio with Piper TTS");
+    throw error;
   }
 
   async checkHealth(): Promise<boolean> {
