@@ -164,19 +164,29 @@ def main():
     models_dir.mkdir(exist_ok=True)
     tr_model = "tr_TR-dfki-medium"
     model_path = models_dir / f"{tr_model}.onnx"
+    config_path = models_dir / f"{tr_model}.onnx.json"
 
+    print(f"Checking for Turkish model: {model_path}")
+    
     if not model_path.exists():
-        print(f"Turkish model not found: {model_path}")
-        print("Please download the model manually from:")
+        print(f"Warning: Turkish model not found: {model_path}")
+        print("Model will be downloaded on first request or you can manually download from:")
         print("https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR/dfki/medium")
-        print("and place it in the ./models directory")
-        return
+        print("Server will start anyway and attempt to handle requests...")
+    else:
+        print(f"Turkish model found: {model_path}")
+        
+    if not config_path.exists():
+        print(f"Warning: Config file not found: {config_path}")
+    else:
+        print(f"Config file found: {config_path}")
 
     server_address = ('0.0.0.0', 5001)
     httpd = HTTPServer(server_address, PiperTTSHandler)
-    print(f"Piper TTS Server starting on http://localhost:5001")
-    print(f"Turkish model: {tr_model}")
-    print("Use POST /tts with JSON body: {\"text\": \"Merhaba dünya\", \"voice\": \"tr_TR-dfki-medium\"}")
+    print(f"Piper TTS Server starting on http://0.0.0.0:5001")
+    print(f"Default Turkish model: {tr_model}")
+    print("Health check: GET /health")
+    print("TTS endpoint: POST /tts with JSON body: {\"text\": \"Merhaba dünya\", \"voice\": \"tr_TR-dfki-medium\"}")
 
     try:
         httpd.serve_forever()

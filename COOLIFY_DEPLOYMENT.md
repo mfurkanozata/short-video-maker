@@ -1,8 +1,21 @@
 # Coolify Deployment Guide
 
 ## Dosyalar
-- `docker-compose.coolify.yml` - Coolify için özel Docker Compose
+- `docker-compose.coolify.yml` - Coolify için özel Docker Compose (health checks ile)
+- `docker-compose.coolify-simple.yml` - Basit versiyon (health check yok)
 - `coolify.env.example` - Environment variables template
+
+## 🚨 Health Check Problemi Çözümü
+
+Eğer `container piper-tts is unhealthy` hatası alıyorsan:
+
+### Çözüm 1: Simple Version Kullan
+Coolify'da compose file olarak `docker-compose.coolify-simple.yml` kullan (health check yok)
+
+### Çözüm 2: Manual Model Download
+1. Container'a bağlan: `docker exec -it piper-tts bash`  
+2. Model kontrol et: `ls -la /app/models/`
+3. Manual download: `curl -L -o models/tr_TR-dfki-medium.onnx ...`
 
 ## Coolify'da Deployment
 
