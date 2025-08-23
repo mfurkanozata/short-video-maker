@@ -14,7 +14,7 @@ RUN git clone https://github.com/ggml-org/whisper.cpp.git .
 RUN git checkout v1.7.1
 RUN make
 WORKDIR /whisper/models
-RUN sh ./download-ggml-model.sh base.en
+RUN sh ./download-ggml-model.sh base
 
 FROM node:22-bookworm-slim AS base
 ENV DEBIAN_FRONTEND=noninteractive
@@ -75,7 +75,7 @@ COPY package.json /app/
 # app configuration via environment variables
 ENV DATA_DIR_PATH=/app/data
 ENV DOCKER=true
-ENV WHISPER_MODEL=base.en
+ENV WHISPER_MODEL=base
 # number of chrome tabs to use for rendering
 ENV CONCURRENCY=1
 # video cache - 2000MB

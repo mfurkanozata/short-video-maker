@@ -4,11 +4,12 @@ import os from "os";
 import fs from "fs-extra";
 import pino from "pino";
 import { kokoroModelPrecision, whisperModels } from "./types/shorts";
+import type { Language } from "@remotion/install-whisper-cpp";
 
 const defaultLogLevel: pino.Level = "info";
 const defaultPort = 3123;
 const whisperVersion = "1.7.1";
-const defaultWhisperModel: whisperModels = "medium.en"; // possible options: "tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large-v1", "large-v2", "large-v3", "large-v3-turbo"
+const defaultWhisperModel: whisperModels = "medium"; // possible options: "tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large-v1", "large-v2", "large-v3", "large-v3-turbo"
 
 // Create the global logger
 const versionNumber = process.env.npm_package_version;
@@ -46,7 +47,7 @@ export class Config {
   public whisperVersion: string = whisperVersion;
   public whisperModel: whisperModels = defaultWhisperModel;
   public kokoroModelPrecision: kokoroModelPrecision = "fp32";
-  public language: string = "en"; // Default language, can be "en", "tr", etc.
+  public language: Language | null = "tr";
 
   // docker-specific, performance-related settings to prevent memory issues
   public concurrency?: number;
@@ -91,7 +92,7 @@ export class Config {
     }
 
     if (process.env.LANGUAGE) {
-      this.language = process.env.LANGUAGE;
+      this.language = process.env.LANGUAGE as Language;
     }
 
     this.concurrency = process.env.CONCURRENCY

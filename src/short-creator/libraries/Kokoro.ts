@@ -68,9 +68,9 @@ export class Kokoro {
     return voiceMap[kokoroVoice] || 'tr_TR-dfki-medium';
   }
 
-  static async init(dtype: kokoroModelPrecision, language: string = "en"): Promise<Kokoro> {
+  static async init(dtype: kokoroModelPrecision, language: string | null = "en"): Promise<Kokoro> {
     // No need to initialize Kokoro TTS, just return Piper TTS wrapper
-    return new Kokoro(language);
+    return new Kokoro(language || "en");
   }
 
   listAvailableVoices(): Voices[] {
