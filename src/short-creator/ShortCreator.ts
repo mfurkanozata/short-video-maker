@@ -130,29 +130,39 @@ export class ShortCreator {
         this.config.tempDirPath,
         tempVideoFileName,
       );
-      tempFiles.push(tempVideoPath);
+      // Add all temp files to cleanup
       tempFiles.push(tempWavPath, tempMp3Path);
+      tempFiles.push(tempVideoPath.replace('.mp4', '_pollinations.png'));
+      tempFiles.push(tempVideoPath.replace('.mp4', '_from_image.mp4'));
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
       const captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
-      const video = await this.pexelsApi.findVideo(
-        scene.searchTerms,
-        audioLength,
-        excludeVideoIds,
-        orientation,
-      );
-
-      logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
-
-      await this.downloadVideoWithRetry(video.url, tempVideoPath, 3);
-
-      excludeVideoIds.push(video.id);
+      // Use Pollinations AI for dynamic image generation
+      const searchPrompt = scene.searchTerms.join(" ").replace(/\s+/g, "");
+      const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}`;
+      
+      // Download Pollinations image and convert to video
+      const tempImagePath = tempVideoPath.replace('.mp4', '_pollinations.png');
+      await this.downloadPollinationsImage(pollinationsImageUrl, tempImagePath);
+      
+      const tempVideoFromImagePath = tempVideoPath.replace('.mp4', '_from_image.mp4');
+      await this.convertImageToVideo(tempImagePath, tempVideoFromImagePath, audioLength);
+      
+      // Use local HTTP server for OffthreadVideo - Remotion only accepts http/https
+      const videoUrl = `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName.replace('.mp4', '_from_image.mp4')}`;
+      
+      logger.debug({ 
+        searchTerms: scene.searchTerms, 
+        pollinationsUrl: pollinationsImageUrl,
+        duration: audioLength,
+        outputPath: tempVideoFromImagePath 
+      }, "Created video from Pollinations AI image");
 
       scenes.push({
         captions,
-        video: `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`,
+        video: videoUrl,
         audio: {
           url: `http://localhost:${this.config.port}/api/tmp/${tempMp3FileName}`,
           duration: audioLength,
@@ -371,6 +381,137 @@ export class ShortCreator {
 
       request.on("error", (error) => {
         fs.unlink(filePath, () => {});
+        reject(error);
+      });
+    });
+  }
+
+  private async reencodeVideoForRemotion(inputPath: string, outputPath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      logger.debug({ inputPath, outputPath }, "Re-encoding video for Remotion compatibility");
+      
+      // FFmpeg command for Remotion-compatible encoding
+      const ffmpeg = require('fluent-ffmpeg');
+      
+      ffmpeg(inputPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .format('mp4')
+        .outputOptions([
+          '-preset fast',
+          '-crf 23',
+          '-pix_fmt yuv420p',
+          '-movflags +faststart',
+          '-r 25' // Standard frame rate
+        ])
+        .size('1080x1920') // Simple resolution setting
+        .on('start', (commandLine: string) => {
+          logger.debug({ commandLine }, "FFmpeg re-encoding started");
+        })
+        .on('progress', (progress: any) => {
+          if (progress.percent) {
+            logger.debug({ percent: Math.round(progress.percent) }, "Video re-encoding progress");
+          }
+        })
+        .on('end', () => {
+          logger.debug({ outputPath }, "Video re-encoding completed successfully");
+          resolve();
+        })
+        .on('error', (error: any) => {
+          logger.error({ error, inputPath, outputPath }, "Video re-encoding failed");
+          reject(new Error(`Video re-encoding failed: ${error.message}`));
+        })
+        .save(outputPath);
+    });
+  }
+
+  private async convertImageToVideo(imagePath: string, outputPath: string, durationSeconds: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      logger.debug({ imagePath, outputPath, durationSeconds }, "Converting image to video");
+      
+      const ffmpeg = require('fluent-ffmpeg');
+      
+      // Create a video from static image with exact duration - optimized for Remotion
+      ffmpeg(imagePath)
+        .inputOptions([
+          '-loop 1', // Loop the image
+          `-t ${durationSeconds}` // Set exact duration
+        ])
+        .videoCodec('libx264')
+        .outputOptions([
+          '-pix_fmt yuv420p', // Ensure compatibility
+          '-r 30', // 30 FPS for smoother playback
+          '-vf scale=1080:1920:flags=lanczos', // High quality scaling
+          '-preset ultrafast', // Fast encoding
+          '-crf 18', // High quality
+          '-movflags +faststart', // Optimize for streaming
+          '-shortest' // End when duration is reached
+        ])
+        .format('mp4')
+        .on('start', (commandLine: string) => {
+          logger.debug({ commandLine }, "Image to video conversion started");
+        })
+        .on('progress', (progress: any) => {
+          if (progress.percent) {
+            logger.debug({ percent: Math.round(progress.percent) }, "Image to video conversion progress");
+          }
+        })
+        .on('end', () => {
+          logger.debug({ outputPath, durationSeconds }, "Image to video conversion completed");
+          resolve();
+        })
+        .on('error', (error: any) => {
+          logger.error({ error, imagePath, outputPath }, "Image to video conversion failed");
+          reject(new Error(`Image to video conversion failed: ${error.message}`));
+        })
+        .save(outputPath);
+    });
+  }
+
+  private async downloadPollinationsImage(imageUrl: string, outputPath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      logger.debug({ imageUrl, outputPath }, "Downloading Pollinations AI image");
+      
+      const https = require('https');
+      const fs = require('fs');
+      
+      const fileStream = fs.createWriteStream(outputPath);
+      const request = https.get(imageUrl, (response: any) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download image: ${response.statusCode} ${response.statusMessage}`));
+          return;
+        }
+        
+        response.pipe(fileStream);
+        fileStream.on("finish", () => {
+          fileStream.close();
+          try {
+            const stats = fs.statSync(outputPath);
+            if (stats.size === 0) {
+              reject(new Error("Downloaded image is empty"));
+              return;
+            }
+            logger.debug({ outputPath, size: stats.size }, "Pollinations image downloaded successfully");
+            resolve();
+          } catch (statError) {
+            reject(new Error(`Failed to validate downloaded image: ${statError}`));
+          }
+        });
+        
+        fileStream.on("error", (error: any) => {
+          fs.unlink(outputPath, () => {});
+          reject(error);
+        });
+      });
+      
+      request.setTimeout(30000, () => {
+        request.destroy();
+        fs.unlink(outputPath, () => {});
+        reject(new Error("Download timeout after 30s"));
+      });
+      
+      request.on("error", (error: any) => {
+        fs.unlink(outputPath, () => {});
         reject(error);
       });
     });
