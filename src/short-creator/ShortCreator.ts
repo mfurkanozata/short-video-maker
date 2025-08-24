@@ -139,9 +139,9 @@ export class ShortCreator {
       const captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
-      // Use Pollinations AI for dynamic image generation
-      const searchPrompt = scene.searchTerms.join(" ").replace(/\s+/g, "");
-      const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}`;
+      // Use Pollinations AI for dynamic image generation with 768x1365 dimensions
+      const searchPrompt = scene.searchTerms.join(" ").replace(/\s+/g, " ");
+      const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}?width=768&height=1365`;
       
       // Download Pollinations image and convert to video
       const tempImagePath = tempVideoPath.replace('.mp4', '_pollinations.png');
@@ -468,52 +468,68 @@ export class ShortCreator {
     });
   }
 
-  private async downloadPollinationsImage(imageUrl: string, outputPath: string): Promise<void> {
+    private async downloadPollinationsImage(imageUrl: string, outputPath: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       logger.debug({ imageUrl, outputPath }, "Downloading Pollinations AI image");
-      
+
       const https = require('https');
       const fs = require('fs');
-      
+
       const fileStream = fs.createWriteStream(outputPath);
-      const request = https.get(imageUrl, (response: any) => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`Failed to download image: ${response.statusCode} ${response.statusMessage}`));
-          return;
-        }
-        
-        response.pipe(fileStream);
-        fileStream.on("finish", () => {
-          fileStream.close();
-          try {
-            const stats = fs.statSync(outputPath);
-            if (stats.size === 0) {
-              reject(new Error("Downloaded image is empty"));
+      
+      const makeRequest = (url: string, followRedirects: boolean = true) => {
+        const request = https.get(url, (response: any) => {
+          logger.debug({ statusCode: response.statusCode, url }, "Pollinations AI response");
+          
+          // Handle redirects
+          if (response.statusCode === 301 || response.statusCode === 302) {
+            if (followRedirects && response.headers.location) {
+              logger.debug({ redirectTo: response.headers.location }, "Following redirect");
+              makeRequest(response.headers.location, false);
               return;
             }
-            logger.debug({ outputPath, size: stats.size }, "Pollinations image downloaded successfully");
-            resolve();
-          } catch (statError) {
-            reject(new Error(`Failed to validate downloaded image: ${statError}`));
           }
+          
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to download image: ${response.statusCode} ${response.statusMessage}`));
+            return;
+          }
+
+          response.pipe(fileStream);
+          fileStream.on("finish", () => {
+            fileStream.close();
+            try {
+              const stats = fs.statSync(outputPath);
+              if (stats.size === 0) {
+                reject(new Error("Downloaded image is empty"));
+                return;
+              }
+              logger.debug({ outputPath, size: stats.size }, "Pollinations image downloaded successfully");
+              resolve();
+            } catch (statError) {
+              reject(new Error(`Failed to validate downloaded image: ${statError}`));
+            }
+          });
+
+          fileStream.on("error", (error: any) => {
+            fs.unlink(outputPath, () => {});
+            reject(error);
+          });
         });
-        
-        fileStream.on("error", (error: any) => {
+
+        request.setTimeout(30000, () => {
+          request.destroy();
+          fs.unlink(outputPath, () => {});
+          reject(new Error("Download timeout after 30s"));
+        });
+
+        request.on("error", (error: any) => {
           fs.unlink(outputPath, () => {});
           reject(error);
         });
-      });
-      
-      request.setTimeout(30000, () => {
-        request.destroy();
-        fs.unlink(outputPath, () => {});
-        reject(new Error("Download timeout after 30s"));
-      });
-      
-      request.on("error", (error: any) => {
-        fs.unlink(outputPath, () => {});
-        reject(error);
-      });
+      };
+
+      makeRequest(imageUrl);
     });
   }
 }
