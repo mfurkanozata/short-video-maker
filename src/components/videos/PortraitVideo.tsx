@@ -137,6 +137,34 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
                 </div>
               </div>
             )}
+
+            {/* Countdown timer for first scene */}
+            {i === 0 && questionVideoData && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 100,
+                  left: 40,
+                  right: 40,
+                  textAlign: "center",
+                  fontFamily: fontFamily,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "10em",
+                    fontWeight: "black",
+                    color: "#FFD700",
+                    textShadow: "4px 4px 8px rgba(0,0,0,0.8)",
+                    background: "rgba(232, 229, 14, 0.85)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
+                  {Math.max(0, Math.ceil(questionVideoData.scene1Duration - (frame / fps)))}
+                </div>
+              </div>
+            )}
             
             {/* Show answer overlay on second scene */}
             {i === 1 && questionVideoData && (
