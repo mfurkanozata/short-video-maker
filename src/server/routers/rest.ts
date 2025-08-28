@@ -6,7 +6,7 @@ import type {
 import fs from "fs-extra";
 import path from "path";
 
-import { validateCreateShortInput } from "../validator";
+import { validateCreateShortInput, validateQuestionVideoInput } from "../validator";
 import { ShortCreator } from "../../short-creator/ShortCreator";
 import { logger } from "../../logger";
 import { Config } from "../../config";
@@ -98,6 +98,50 @@ export class APIRouter {
     this.router.get("/voices", (req: ExpressRequest, res: ExpressResponse) => {
       res.status(200).json(this.shortCreator.ListAvailableVoices());
     });
+
+    this.router.get("/music-list", (req: ExpressRequest, res: ExpressResponse) => {
+      res.status(200).json(this.shortCreator.ListSortedMusic());
+    });
+
+    this.router.post(
+      "/question-video",
+      async (req: ExpressRequest, res: ExpressResponse) => {
+        try {
+          const input = validateQuestionVideoInput(req.body);
+
+          logger.info({ input }, "Creating question video");
+
+          const videoId = this.shortCreator.addQuestionVideoToQueue(input);
+
+          res.status(201).json({
+            videoId,
+          });
+        } catch (error: unknown) {
+          logger.error(error, "Error validating question video input");
+
+          // Handle validation errors specifically
+          if (error instanceof Error && error.message.startsWith("{")) {
+            try {
+              const errorData = JSON.parse(error.message);
+              res.status(400).json({
+                error: "Validation failed",
+                message: errorData.message,
+                missingFields: errorData.missingFields,
+              });
+              return;
+            } catch (parseError: unknown) {
+              logger.error(parseError, "Error parsing validation error");
+            }
+          }
+
+          // Fallback for other errors
+          res.status(400).json({
+            error: "Invalid input",
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      },
+    );
 
     this.router.get(
       "/short-videos",

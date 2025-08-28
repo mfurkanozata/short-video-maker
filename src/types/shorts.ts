@@ -38,6 +38,10 @@ export const sceneInput = z.object({
     .describe(
       "Search term for video, 1 word, and at least 2-3 search terms should be provided for each scene. Make sure to match the overall context with the word - regardless what the video search result would be.",
     ),
+  inputProvider: z
+    .enum(["pexels", "pollinations"])
+    .optional()
+    .describe("Video source provider. 'pexels' for Pexels videos, 'pollinations' for Pollinations AI images. Defaults to 'pollinations' if not specified."),
 });
 export type SceneInput = z.infer<typeof sceneInput>;
 
@@ -178,3 +182,29 @@ export type whisperModels =
   | "large-v2"
   | "large-v3"
   | "large-v3-turbo";
+
+// Question Video Types
+export const questionSpecs = z.object({
+  brand: z.string().optional().describe("Marka"),
+  productionYear: z.string().optional().describe("Üretim yılı"),
+  topSpeed: z.string().optional().describe("Maksimum hız"),
+  cityConsumption: z.string().optional().describe("Şehir içi yakıt tüketimi"),
+  highwayConsumption: z.string().optional().describe("Şehirlerarası yakıt tüketimi"),
+  transmission: z.string().optional().describe("Vites türü"),
+  model: z.string().optional().describe("Model (soruda gizlenecek)")
+});
+export type QuestionSpecs = z.infer<typeof questionSpecs>;
+
+export const questionVideoInput = z.object({
+  question: z.string().describe("Sorulacak soru metni"),
+  questionImageTerm: z.array(z.string()).describe("Birinci sahne arka plan resmi için arama terimleri"),
+  specs: z.array(z.string()).optional().describe("Araç teknik özellikleri listesi (spec1, spec2, ...)"),
+  unknownSpec: z.string().describe("Bilinmeyen özellik (kırmızı ile vurgulanacak)"),
+  answer: z.string().describe("Sorunun cevabı metni (ikinci scene'de seslendirilecek)"),
+  answerImageTerm: z.array(z.string()).describe("İkinci sahne arka plan resmi için arama terimleri"),
+  scene1Duration: z.number().positive().describe("Birinci scene süresi (saniye)"),
+  scene2Duration: z.number().positive().describe("İkinci scene süresi (saniye)"),
+  musicIndex: z.number().int().min(1).max(31).describe("Müzik dosyası indexi (1-31 arası, a-z sıralı)"),
+  config: renderConfig.optional().describe("Video render ayarları")
+});
+export type QuestionVideoInput = z.infer<typeof questionVideoInput>;

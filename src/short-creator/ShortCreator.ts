@@ -22,13 +22,25 @@ import type {
   MusicMoodEnum,
   MusicTag,
   MusicForVideo,
+  QuestionVideoInput,
+  Caption,
+  QuestionSpecs,
 } from "../types/shorts";
+import { VoiceEnum } from "../types/shorts";
 
 export class ShortCreator {
   private queue: {
     sceneInput: SceneInput[];
     config: RenderConfig;
     id: string;
+    skipCaptions?: boolean;
+    questionVideoData?: {
+      specs: string[];
+      unknownSpec: string;
+      answer: string;
+      scene1Duration: number;
+      scene2Duration: number;
+    };
   }[] = [];
   constructor(
     private config: Config,
@@ -70,13 +82,13 @@ export class ShortCreator {
     if (this.queue.length === 0) {
       return;
     }
-    const { sceneInput, config, id } = this.queue[0];
+    const { sceneInput, config, id, skipCaptions, questionVideoData } = this.queue[0];
     logger.debug(
       { sceneInput, config, id },
       "Processing video item in the queue",
     );
     try {
-      await this.createShort(id, sceneInput, config);
+      await this.createShort(id, sceneInput, config, skipCaptions, questionVideoData);
       logger.debug({ id }, "Video created successfully");
     } catch (error: unknown) {
       logger.error(error, "Error creating video");
@@ -90,6 +102,14 @@ export class ShortCreator {
     videoId: string,
     inputScenes: SceneInput[],
     config: RenderConfig,
+    skipCaptions?: boolean,
+    questionVideoData?: {
+      specs: string[];
+      unknownSpec: string;
+      answer: string;
+      scene1Duration: number;
+      scene2Duration: number;
+    },
   ): Promise<string> {
     logger.debug(
       {
@@ -112,12 +132,22 @@ export class ShortCreator {
         scene.text,
         config.voice ?? "af_heart",
       );
+      
       let { audioLength } = audio;
       const { audio: audioStream } = audio;
 
-      // add the paddingBack in seconds to the last scene
-      if (index + 1 === inputScenes.length && config.paddingBack) {
-        audioLength += config.paddingBack / 1000;
+      // For question videos, override duration with custom values
+      if (questionVideoData) {
+        if (index === 0) {
+          audioLength = questionVideoData.scene1Duration;
+        } else {
+          audioLength = questionVideoData.scene2Duration;
+        }
+      } else {
+        // add the paddingBack in seconds to the last scene for regular videos
+        if (index + 1 === inputScenes.length && config.paddingBack) {
+          audioLength += config.paddingBack / 1000;
+        }
       }
 
       const tempId = cuid();
@@ -136,7 +166,12 @@ export class ShortCreator {
       tempFiles.push(tempVideoPath.replace('.mp4', '_from_image.mp4'));
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
-      const captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
+      
+      // Skip captions for question videos
+      let captions: Caption[] = [];
+      if (!skipCaptions) {
+        captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
+      }
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
       // Use Pollinations AI for dynamic image generation with 768x1365 dimensions
@@ -192,6 +227,7 @@ export class ShortCreator {
           },
           musicVolume: config.musicVolume,
         },
+        questionVideoData, // Pass question video data for display
       },
       videoId,
       orientation,
@@ -279,6 +315,66 @@ export class ShortCreator {
 
   public ListAvailableVoices(): string[] {
     return this.kokoro.listAvailableVoices();
+  }
+
+  public ListSortedMusic(): Array<{ index: number; file: string; mood: string }> {
+    return this.musicManager.getSortedMusicList();
+  }
+
+  public addQuestionVideoToQueue(input: QuestionVideoInput): string {
+    const id = cuid();
+    
+    // Get selected music by index
+    const selectedMusic = this.musicManager.getMusicByIndex(input.musicIndex);
+    if (!selectedMusic) {
+      throw new Error(`Invalid music index: ${input.musicIndex}`);
+    }
+
+    // Scene 1: Question with specs overlay
+    const questionScene: SceneInput = {
+      text: input.question,
+      language: input.config?.voice?.startsWith('tr_') ? 'tr' : 'en',
+      searchTerms: input.questionImageTerm,
+      inputProvider: 'pollinations'
+    };
+
+    // Scene 2: Answer with voice
+    const answerScene: SceneInput = {
+      text: input.answer,
+      language: input.config?.voice?.startsWith('tr_') ? 'tr' : 'en',
+      searchTerms: input.answerImageTerm,
+      inputProvider: 'pollinations'
+    };
+
+    // Set up config with custom music and NO captions
+    const config: RenderConfig = {
+      ...input.config,
+      captionPosition: undefined, // No captions
+      captionBackgroundColor: undefined, // No captions
+      music: selectedMusic.mood as MusicMoodEnum,
+      orientation: input.config?.orientation || OrientationEnum.portrait,
+      voice: input.config?.voice || VoiceEnum.af_heart
+    };
+
+    // Add to queue with special flag for question videos and extended data
+    this.queue.push({
+      sceneInput: [questionScene, answerScene],
+      config,
+      id,
+      skipCaptions: true, // Custom flag for question videos
+      questionVideoData: {
+        specs: input.specs || [],
+        unknownSpec: input.unknownSpec,
+        answer: input.answer,
+        scene1Duration: input.scene1Duration,
+        scene2Duration: input.scene2Duration,
+      },
+    });
+
+    // Process queue asynchronously
+    this.processQueue();
+
+    return id;
   }
 
   private async downloadVideoWithRetry(url: string, filePath: string, retries: number): Promise<void> {

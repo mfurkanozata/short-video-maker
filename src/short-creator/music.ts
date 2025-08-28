@@ -211,4 +211,28 @@ export class MusicManager {
       }
     }
   }
+
+  public getMusicByIndex(index: number): MusicForVideo | null {
+    const sortedMusicList = this.musicList().sort((a, b) => 
+      a.file.localeCompare(b.file, 'en', { sensitivity: 'base' })
+    );
+    
+    if (index < 1 || index > sortedMusicList.length) {
+      return null;
+    }
+    
+    return sortedMusicList[index - 1]; // Convert 1-based to 0-based index
+  }
+
+  public getSortedMusicList(): Array<{ index: number; file: string; mood: string }> {
+    const sortedMusicList = this.musicList().sort((a, b) => 
+      a.file.localeCompare(b.file, 'en', { sensitivity: 'base' })
+    );
+    
+    return sortedMusicList.map((music, index) => ({
+      index: index + 1,
+      file: music.file,
+      mood: music.mood
+    }));
+  }
 }

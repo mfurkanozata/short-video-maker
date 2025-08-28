@@ -5,6 +5,7 @@ import {
   type CaptionLine,
   type OrientationEnum,
   MusicVolumeEnum,
+  type QuestionSpecs,
 } from "../types/shorts";
 import { AvailableComponentsEnum, type OrientationConfig } from "./types";
 
@@ -32,6 +33,13 @@ export const shortVideoSchema = z.object({
     start: z.number(),
     end: z.number(),
   }),
+  questionVideoData: z.object({
+    specs: z.array(z.string()),
+    unknownSpec: z.string(),
+    answer: z.string(),
+    scene1Duration: z.number(),
+    scene2Duration: z.number(),
+  }).optional(),
 });
 
 export function createCaptionPages({

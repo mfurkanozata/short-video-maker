@@ -91,4 +91,31 @@ export class FFMpeg {
         });
     });
   }
+
+  async createSilentAudio(
+    durationSeconds: number,
+    outputPath: string,
+  ): Promise<string> {
+    logger.debug({ durationSeconds, outputPath }, "Creating silent audio");
+    
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(`anullsrc=channel_layout=mono:sample_rate=16000`)
+        .inputFormat('lavfi')
+        .duration(durationSeconds)
+        .audioCodec("pcm_s16le")
+        .audioChannels(1)
+        .audioFrequency(16000)
+        .toFormat("wav")
+        .save(outputPath)
+        .on("end", () => {
+          logger.debug("Silent audio creation complete");
+          resolve(outputPath);
+        })
+        .on("error", (err) => {
+          logger.error(err, "Error creating silent audio:");
+          reject(err);
+        });
+    });
+  }
 }

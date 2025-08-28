@@ -21,6 +21,7 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
   scenes,
   music,
   config,
+  questionVideoData,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -90,6 +91,94 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
           >
             <OffthreadVideo src={video} muted />
             <Audio src={audio.url} />
+            
+            {/* Show specs overlay on first scene (question) */}
+            {i === 0 && questionVideoData && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 80,
+                  left: 40,
+                  right: 40,
+                  backgroundColor: "rgba(0, 0, 0, 0.9)",
+                  borderRadius: "25px",
+                  padding: "40px",
+                  color: "white",
+                  fontFamily: fontFamily,
+                }}
+              >
+                {questionVideoData.specs.map((spec, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      fontSize: "4.5em",
+                      fontWeight: "black",
+                      marginBottom: "20px",
+                      textAlign: "center",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {spec}
+                  </div>
+                ))}
+                
+                {/* Unknown spec highlighted in red */}
+                <div
+                  style={{
+                    fontSize: "6em",
+                    fontWeight: "black",
+                    marginTop: "30px",
+                    textAlign: "center",
+                    color: "#FF0000",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {questionVideoData.unknownSpec}: ???
+                </div>
+              </div>
+            )}
+            
+            {/* Show answer overlay on second scene */}
+            {i === 1 && questionVideoData && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: 40,
+                  right: 40,
+                  transform: "translateY(-50%)",
+                  backgroundColor: "rgba(0, 0, 0, 0.9)",
+                  borderRadius: "25px",
+                  padding: "60px",
+                  color: "white",
+                  fontFamily: fontFamily,
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "5em",
+                    fontWeight: "black",
+                    marginBottom: "30px",
+                    color: "#FFD700",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {questionVideoData.unknownSpec}:
+                </div>
+                <div
+                  style={{
+                    fontSize: "7em",
+                    fontWeight: "black",
+                    color: "#00FF00",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {questionVideoData.answer}
+                </div>
+              </div>
+            )}
+            
             {pages.map((page, j) => {
               return (
                 <Sequence

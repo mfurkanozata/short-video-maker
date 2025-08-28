@@ -21,6 +21,7 @@ export const LandscapeVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
   scenes,
   music,
   config,
+  questionVideoData,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -90,6 +91,9 @@ export const LandscapeVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
           >
             <OffthreadVideo src={video} muted />
             <Audio src={audio.url} />
+            
+
+            
             {pages.map((page, j) => {
               return (
                 <Sequence

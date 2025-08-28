@@ -1,4 +1,4 @@
-import { createShortInput, CreateShortInput } from "../types/shorts";
+import { createShortInput, CreateShortInput, questionVideoInput, QuestionVideoInput } from "../types/shorts";
 import { logger } from "../logger";
 import { ZodError } from "zod";
 
@@ -10,6 +10,25 @@ export interface ValidationErrorResult {
 export function validateCreateShortInput(input: object): CreateShortInput {
   const validated = createShortInput.safeParse(input);
   logger.info({ validated }, "Validated input");
+
+  if (validated.success) {
+    return validated.data;
+  }
+
+  // Process the validation errors
+  const errorResult = formatZodError(validated.error);
+
+  throw new Error(
+    JSON.stringify({
+      message: errorResult.message,
+      missingFields: errorResult.missingFields,
+    }),
+  );
+}
+
+export function validateQuestionVideoInput(input: object): QuestionVideoInput {
+  const validated = questionVideoInput.safeParse(input);
+  logger.info({ validated }, "Validated question video input");
 
   if (validated.success) {
     return validated.data;
