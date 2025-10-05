@@ -73,11 +73,12 @@ export class ElevenLabsTTS {
 
       return response.data as ArrayBuffer;
     }, {
-      maxAttempts: 3,
-      delayMs: 1000,
+      maxAttempts: 5,
+      delayMs: 1500,
       backoffMultiplier: 2,
-      maxDelayMs: 5000,
-      retryCondition: retryConditions.elevenlabs
+      maxDelayMs: 20000,
+      retryCondition: retryConditions.elevenlabs,
+      jitter: true
     });
   }
 }

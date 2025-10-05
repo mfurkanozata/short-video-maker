@@ -6,6 +6,8 @@ export interface RetryOptions {
   backoffMultiplier?: number;
   maxDelayMs?: number;
   retryCondition?: (error: any) => boolean;
+  // add full jitter to spread thundering herd
+  jitter?: boolean;
 }
 
 export class RetryError extends Error {
@@ -28,7 +30,8 @@ export async function withRetry<T>(
     delayMs = 1000,
     backoffMultiplier = 2,
     maxDelayMs = 10000,
-    retryCondition = () => true
+    retryCondition = () => true,
+    jitter = true
   } = options;
 
   let lastError: any;
@@ -68,15 +71,36 @@ export async function withRetry<T>(
         );
       }
       
+      // Honor Retry-After header if present (seconds or HTTP-date)
+      let effectiveDelay = currentDelay;
+      const retryAfter = (error as any)?.response?.headers?.["retry-after"];
+      if (retryAfter) {
+        const asInt = parseInt(String(retryAfter), 10);
+        if (!Number.isNaN(asInt)) {
+          effectiveDelay = Math.min(asInt * 1000, maxDelayMs);
+        } else {
+          const dateMs = Date.parse(String(retryAfter));
+          if (!Number.isNaN(dateMs)) {
+            effectiveDelay = Math.min(Math.max(0, dateMs - Date.now()), maxDelayMs);
+          }
+        }
+      }
+
+      // Apply full jitter (0..effectiveDelay)
+      if (jitter) {
+        const jitterAmount = Math.floor(Math.random() * effectiveDelay);
+        effectiveDelay = jitterAmount;
+      }
+
       logger.warn({ 
         attempt, 
         maxAttempts, 
-        delayMs: currentDelay,
+        delayMs: effectiveDelay,
         error: error instanceof Error ? error.message : String(error) 
       }, "Operation failed, retrying");
       
       // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, currentDelay));
+      await new Promise(resolve => setTimeout(resolve, effectiveDelay));
       
       // Increase delay for next attempt (exponential backoff)
       currentDelay = Math.min(currentDelay * backoffMultiplier, maxDelayMs);

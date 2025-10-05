@@ -23,27 +23,6 @@ services:
       - "coolify.managed=true"
       - "coolify.name=faster-whisper"
 
-  piper-tts:
-    build:
-      context: .
-      dockerfile: piper.Dockerfile
-    restart: unless-stopped
-    environment:
-      - PYTHONUNBUFFERED=1
-    networks:
-      - short-video-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 10
-      start_period: 120s
-    volumes:
-      - piper_models:/app/models
-    labels:
-      - "coolify.managed=true"
-      - "coolify.name=piper-tts"
-
   short-creator:
     build:
       context: .
@@ -60,7 +39,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CONCURRENCY=${CONCURRENCY:-1}
       - VIDEO_CACHE_SIZE_IN_BYTES=${VIDEO_CACHE_SIZE_IN_BYTES:-2097152000}
-      - PIPER_TTS_URL=http://piper-tts:5001
       - NODE_ENV=production
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
@@ -69,8 +47,6 @@ services:
     ports:
       - "3123:3123"
     depends_on:
-      piper-tts:
-        condition: service_started
       faster-whisper:
         condition: service_healthy
     networks:
@@ -95,10 +71,6 @@ networks:
 
 volumes:
   video_data:
-    driver: local
-    labels:
-      - "coolify.managed=true"
-  piper_models:
     driver: local
     labels:
       - "coolify.managed=true"
