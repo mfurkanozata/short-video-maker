@@ -5,6 +5,8 @@ import {
   useVideoConfig,
   Audio,
   OffthreadVideo,
+  interpolate,
+  Loop,
 } from "remotion";
 import { z } from "zod";
 import "./fonts.css";
@@ -81,13 +83,39 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
           durationInFrames += Math.round((config.paddingBack / 1000) * fps);
         }
 
+        // Local frame inside this scene to reset animations per scene
+        const localFrame = Math.max(
+          0,
+          Math.min(frame - startFrame, durationInFrames),
+        );
+
+        // Slow zoom-in (Ken Burns) for the background video across the scene
+        const scale = interpolate(
+          localFrame,
+          [0, Math.max(1, Math.round(durationInFrames * 0.6))],
+          [1, 1.12],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+        );
+
         return (
           <Sequence
             from={startFrame}
             durationInFrames={durationInFrames}
             key={`scene-${i}`}
           >
-            <OffthreadVideo src={video} muted />
+            <Loop durationInFrames={durationInFrames}>
+              <OffthreadVideo
+                src={video}
+                muted
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: `scale(${scale})`,
+                  transformOrigin: "50% 50%",
+                }}
+              />
+            </Loop>
             <Audio src={audio.url} />
             {/* SFX removed */}
             
