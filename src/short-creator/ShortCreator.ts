@@ -29,6 +29,7 @@ import type {
   QuestionSpecs,
 } from "../types/shorts";
 import { VoiceEnum } from "../types/shorts";
+import { stripBracketDirectives } from "../utils/text";
 
 export class ShortCreator {
   private queue: {
@@ -213,8 +214,9 @@ export class ShortCreator {
 
     let index = 0;
     for (const scene of inputScenes) {
+      const sanitized = stripBracketDirectives(scene.text);
       const audio = await this.kokoro.generate(
-        scene.text,
+        sanitized,
         config.voice ?? "af_heart",
       );
       
@@ -255,7 +257,7 @@ export class ShortCreator {
       // Skip captions for question videos
       let captions: Caption[] = [];
       if (!skipCaptions) {
-        captions = await this.whisper.CreateCaption(tempWavPath, scene.text);
+        captions = await this.whisper.CreateCaption(tempWavPath, sanitized);
       }
 
       await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);

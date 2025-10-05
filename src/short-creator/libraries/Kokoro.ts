@@ -6,6 +6,7 @@ import {
 import { logger } from "../../config";
 import { PiperTTS } from "./PiperTTS";
 import { ElevenLabsTTS } from "./ElevenLabsTTS";
+import { stripBracketDirectives } from "../../utils/text";
 
 export class Kokoro {
   private piperTTS: PiperTTS;
@@ -30,6 +31,7 @@ export class Kokoro {
     audio: ArrayBuffer;
     audioLength: number;
   }> {
+    const sanitizedText = stripBracketDirectives(text);
     // Allow raw ElevenLabs voice ID via config.voice coming from the request payload
     // Detect ElevenLabs voice IDs (usually long alphanumeric IDs)
     const voiceStr = String(voice || '');
@@ -41,10 +43,10 @@ export class Kokoro {
 
     if (useEleven && this.eleven) {
       try {
-        logger.debug({ text, voice, language: this.language, elevenVoiceId }, "Using ElevenLabs TTS");
+        logger.debug({ text: sanitizedText, voice, language: this.language, elevenVoiceId }, "Using ElevenLabs TTS");
         // Use raw text for maximum speed (no added pauses)
         const audio = await this.eleven.synthesize({
-          text: text,
+          text: sanitizedText,
           voiceId: elevenVoiceId,
         });
         // ElevenLabs returns MP3 by default; calculate duration dynamically using actual bitrate
@@ -56,10 +58,10 @@ export class Kokoro {
     }
 
     try {
-      logger.debug({ text, voice, language: this.language }, "Using Piper TTS");
+      logger.debug({ text: sanitizedText, voice, language: this.language }, "Using Piper TTS");
       const piperVoice = this.mapKokoroVoiceToPiper(voice);
       const audio = await this.piperTTS.generateAudio({
-        text: this.enhanceText(text),
+        text: this.enhanceText(sanitizedText),
         voice: piperVoice,
       });
       const audioLength = audio.byteLength / (22050 * 2);
