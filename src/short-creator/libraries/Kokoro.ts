@@ -4,22 +4,19 @@ import {
   type Voices,
 } from "../../types/shorts";
 import { logger } from "../../config";
-import { PiperTTS } from "./PiperTTS";
 import { ElevenLabsTTS } from "./ElevenLabsTTS";
 import { stripBracketDirectives } from "../../utils/text";
 
 export class Kokoro {
-  private piperTTS: PiperTTS;
   private eleven?: ElevenLabsTTS;
 
   constructor(private language: string = "en") {
-    const url = process.env.PIPER_TTS_URL || "http://piper-tts:5001";
-    this.piperTTS = new PiperTTS(url);
     if (process.env.ELEVENLABS_API_KEY) {
       try {
         this.eleven = new ElevenLabsTTS(process.env.ELEVENLABS_API_KEY);
       } catch (e) {
-        // ignore init error, will fallback to Piper
+        // surface init error since we no longer fallback
+        throw e;
       }
     }
   }
@@ -40,37 +37,17 @@ export class Kokoro {
     const envVoiceId = process.env.ELEVENLABS_VOICE_ID || "";
     const elevenVoiceId = providedVoiceId || envVoiceId;
     const useEleven = !!this.eleven && !!(process.env.ELEVENLABS_API_KEY) && !!elevenVoiceId;
-
-    if (useEleven && this.eleven) {
-      try {
-        logger.debug({ text: sanitizedText, voice, language: this.language, elevenVoiceId }, "Using ElevenLabs TTS");
-        // Use raw text for maximum speed (no added pauses)
-        const audio = await this.eleven.synthesize({
-          text: sanitizedText,
-          voiceId: elevenVoiceId,
-        });
-        // ElevenLabs returns MP3 by default; calculate duration dynamically using actual bitrate
-        const audioLength = await this.calculateAudioDuration(audio);
-        return { audio, audioLength };
-      } catch (e) {
-        logger.warn({ e }, "ElevenLabs failed, falling back to Piper");
-      }
+    if (!useEleven || !this.eleven) {
+      throw new Error("ElevenLabs is required but not properly configured (missing API key or voiceId)");
     }
 
-    try {
-      logger.debug({ text: sanitizedText, voice, language: this.language }, "Using Piper TTS");
-      const piperVoice = this.mapKokoroVoiceToPiper(voice);
-      const audio = await this.piperTTS.generateAudio({
-        text: this.enhanceText(sanitizedText),
-        voice: piperVoice,
-      });
-      const audioLength = audio.byteLength / (22050 * 2);
-      logger.debug({ text, voice, audioLength, language: this.language }, "Audio generated with Piper TTS");
-      return { audio, audioLength };
-    } catch (error) {
-      logger.error({ error }, "Piper TTS failed");
-      throw new Error(`Piper TTS error: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    logger.debug({ text: sanitizedText, voice, language: this.language, elevenVoiceId }, "Using ElevenLabs TTS");
+    const audio = await this.eleven.synthesize({
+      text: sanitizedText,
+      voiceId: elevenVoiceId,
+    });
+    const audioLength = await this.calculateAudioDuration(audio);
+    return { audio, audioLength };
   }
 
   // Calculate audio duration dynamically using actual bitrate
@@ -107,28 +84,7 @@ export class Kokoro {
     }
   }
 
-  // Map Kokoro voices to available Piper voices
-  private mapKokoroVoiceToPiper(kokoroVoice: Voices): string {
-    const voiceMap: Record<string, string> = {
-      'af_heart': 'tr_TR-dfki-medium', // Default to Turkish for now
-      'af_soft': 'tr_TR-dfki-medium',
-      'af_strong': 'tr_TR-dfki-medium',
-      'af_gentle': 'tr_TR-dfki-medium',
-      'af_energetic': 'tr_TR-dfki-medium',
-      'af_calm': 'tr_TR-dfki-medium',
-      'af_cheerful': 'tr_TR-dfki-medium',
-      'af_sad': 'tr_TR-dfki-medium',
-      'af_angry': 'tr_TR-dfki-medium',
-      'af_fearful': 'tr_TR-dfki-medium',
-      'af_disgusted': 'tr_TR-dfki-medium',
-      'af_surprised': 'tr_TR-dfki-medium',
-    };
-    
-    return voiceMap[kokoroVoice] || 'tr_TR-dfki-medium';
-  }
-
   static async init(dtype: kokoroModelPrecision, language: string | null = "en"): Promise<Kokoro> {
-    // No need to initialize Kokoro TTS, just return Piper TTS wrapper
     return new Kokoro(language || "en");
   }
 
