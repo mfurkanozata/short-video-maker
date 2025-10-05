@@ -57,6 +57,7 @@ export function createCaptionPages({
   lineCount: number;
   maxDistanceMs: number;
 }) {
+  const sanitize = (t: string) => t.replace(/\[[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
   const pages = [];
   let currentPage: CaptionPage = {
     startMs: 0,
@@ -90,7 +91,7 @@ export function createCaptionPages({
     }
 
     // Check if adding this caption exceeds the line length
-    const currentLineText = currentLine.texts.map((t) => t.text).join(" ");
+    const currentLineText = currentLine.texts.map((t) => sanitize(t.text)).join(" ");
     if (
       currentLine.texts.length > 0 &&
       currentLineText.length + 1 + caption.text.length > lineMaxLength
@@ -115,8 +116,13 @@ export function createCaptionPages({
     }
 
     // Add caption to current line
+    const sanitizedText = sanitize(caption.text);
+    if (sanitizedText.length === 0) {
+      // Skip directives-only tokens
+      return;
+    }
     currentLine.texts.push({
-      text: caption.text,
+      text: sanitizedText,
       startMs: caption.startMs,
       endMs: caption.endMs,
     });
