@@ -907,8 +907,14 @@ export class ShortCreator {
         index 
       }, "Using existing temp files for scene");
 
+      // Generate simple time-distributed captions from input text for DEV_MODE
+      const devCaptions = this.generateNaiveCaptions(
+        inputScenes[index]?.text || "",
+        audioDuration,
+      );
+
       scenes.push({
-        captions: [], // Skip captions in dev mode
+        captions: devCaptions,
         video: videoUrl,
         audio: {
           url: audioUrl,
@@ -953,6 +959,26 @@ export class ShortCreator {
 
     logger.debug({ videoId, totalDuration }, "DEV_MODE video created successfully");
     return videoId;
+  }
+
+  // Create evenly distributed captions over the audio duration for DEV_MODE
+  private generateNaiveCaptions(text: string, durationSeconds: number): Caption[] {
+    const normalized = (text || "").replace(/\s+/g, " ").trim();
+    if (!normalized) return [];
+    const words = normalized.split(" ");
+    const totalMs = Math.max(1, Math.round(durationSeconds * 1000));
+    const perWordMs = Math.max(1, Math.floor(totalMs / words.length));
+
+    const captions: Caption[] = [];
+    let current = 0;
+    for (let i = 0; i < words.length; i++) {
+      const startMs = current;
+      // Ensure last word ends exactly at totalMs
+      const endMs = i === words.length - 1 ? totalMs : Math.min(totalMs, startMs + perWordMs);
+      captions.push({ text: words[i], startMs, endMs });
+      current = endMs;
+    }
+    return captions;
   }
 
   private async getExistingTempFiles(pattern: string): Promise<string[]> {

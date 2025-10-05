@@ -7,7 +7,7 @@ import {
   OffthreadVideo,
 } from "remotion";
 import { z } from "zod";
-import { loadFont } from "@remotion/google-fonts/BarlowCondensed";
+import "./fonts.css";
 
 import {
   calculateVolume,
@@ -15,7 +15,7 @@ import {
   shortVideoSchema,
 } from "../utils";
 
-const { fontFamily } = loadFont(); // "Barlow Condensed"
+const fontFamily = "'Wix Madefor Display'";
 
 export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
   scenes,
@@ -26,7 +26,7 @@ export const PortraitVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const captionBackgroundColor = config.captionBackgroundColor ?? "blue";
+  const captionBackgroundColor = config.captionBackgroundColor ?? "#FFFF00";
 
   const activeStyle = {
     backgroundColor: captionBackgroundColor,

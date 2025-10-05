@@ -70,6 +70,9 @@ COPY static /app/static
 COPY --from=install-whisper /whisper /app/data/libs/whisper
 COPY --from=prod-deps /app/node_modules /app/node_modules
 COPY --from=build /app/dist /app/dist
+# Ensure Remotion runtime can resolve fonts.css and font files from dist
+COPY src/components/videos/fonts.css /app/dist/components/videos/fonts.css
+COPY static/fonts /app/dist/static/fonts
 COPY package.json /app/
 
 # app configuration via environment variables
