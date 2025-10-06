@@ -249,7 +249,7 @@ export class ShortCreator {
       );
       // Add all temp files to cleanup
       tempFiles.push(tempWavPath, tempMp3Path);
-      tempFiles.push(tempVideoPath.replace('.mp4', '_pollinations.png'));
+      // remove legacy pollinations temp naming (OpenAI-only)
       tempFiles.push(tempVideoPath.replace('.mp4', '_from_image.mp4'));
 
       await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
@@ -264,19 +264,10 @@ export class ShortCreator {
       // Prefer OpenAI Images for vertical (1080x1920) if OPENAI_API_KEY is provided
       const tempImagePath = tempVideoPath.replace('.mp4', '_image.png');
       const searchPrompt = scene.searchTerms.join(" ").replace(/\s+/g, " ");
-      const useOpenAI = !!process.env.OPENAI_API_KEY;
-      if (useOpenAI) {
-        try {
-          await this.generateOpenAIImage(searchPrompt, tempImagePath);
-        } catch (error) {
-          logger.warn({ error }, "OpenAI image generation failed, falling back to Pollinations");
-          const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}?width=768&height=1365&model=turbo&nologo=true`;
-          await this.downloadPollinationsImage(pollinationsImageUrl, tempImagePath);
-        }
-      } else {
-        const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}?width=768&height=1365&model=turbo&nologo=true`;
-        await this.downloadPollinationsImage(pollinationsImageUrl, tempImagePath);
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("OPENAI_API_KEY is required for image generation");
       }
+      await this.generateOpenAIImage(searchPrompt, tempImagePath);
       
       const tempVideoFromImagePath = tempVideoPath.replace('.mp4', '_from_image.mp4');
       await this.convertImageToVideo(tempImagePath, tempVideoFromImagePath, audioLength);
@@ -286,7 +277,7 @@ export class ShortCreator {
       
       logger.debug({ 
         searchTerms: scene.searchTerms,
-        provider: useOpenAI ? 'openai' : 'pollinations',
+        provider: 'openai',
         duration: audioLength,
         outputPath: tempVideoFromImagePath 
       }, "Created video from generated image");
@@ -678,70 +669,7 @@ export class ShortCreator {
     });
   }
 
-    private async downloadPollinationsImage(imageUrl: string, outputPath: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      logger.debug({ imageUrl, outputPath }, "Downloading Pollinations AI image");
-
-      const https = require('https');
-      const fs = require('fs');
-
-      const fileStream = fs.createWriteStream(outputPath);
-      
-      const makeRequest = (url: string, followRedirects: boolean = true) => {
-        const request = https.get(url, (response: any) => {
-          logger.debug({ statusCode: response.statusCode, url }, "Pollinations AI response");
-          
-          // Handle redirects
-          if (response.statusCode === 301 || response.statusCode === 302) {
-            if (followRedirects && response.headers.location) {
-              logger.debug({ redirectTo: response.headers.location }, "Following redirect");
-              makeRequest(response.headers.location, false);
-              return;
-            }
-          }
-          
-          if (response.statusCode !== 200) {
-            reject(new Error(`Failed to download image: ${response.statusCode} ${response.statusMessage}`));
-            return;
-          }
-
-          response.pipe(fileStream);
-          fileStream.on("finish", () => {
-            fileStream.close();
-            try {
-              const stats = fs.statSync(outputPath);
-              if (stats.size === 0) {
-                reject(new Error("Downloaded image is empty"));
-                return;
-              }
-              logger.debug({ outputPath, size: stats.size }, "Pollinations image downloaded successfully");
-              resolve();
-            } catch (statError) {
-              reject(new Error(`Failed to validate downloaded image: ${statError}`));
-            }
-          });
-
-          fileStream.on("error", (error: any) => {
-            fs.unlink(outputPath, () => {});
-            reject(error);
-          });
-        });
-
-        request.setTimeout(120000, () => {
-          request.destroy();
-          fs.unlink(outputPath, () => {});
-          reject(new Error("Download timeout after 120s"));
-        });
-
-        request.on("error", (error: any) => {
-          fs.unlink(outputPath, () => {});
-          reject(error);
-        });
-      };
-
-      makeRequest(imageUrl);
-    });
-  }
+  // Pollinations fallback removed: OpenAI-only path enforced
 
   private async generateOpenAIImage(prompt: string, outputPath: string): Promise<void> {
     return withRetry(async () => {
@@ -769,11 +697,12 @@ export class ShortCreator {
       fs.writeFileSync(outputPath, buffer);
       logger.debug({ outputPath, prompt }, 'OpenAI image saved');
     }, {
-      maxAttempts: 3,
-      delayMs: 2000,
+      maxAttempts: 5,
+      delayMs: 1500,
       backoffMultiplier: 2,
-      maxDelayMs: 10000,
-      retryCondition: retryConditions.openai
+      maxDelayMs: 20000,
+      retryCondition: retryConditions.openai,
+      jitter: true
     });
   }
 
@@ -782,20 +711,11 @@ export class ShortCreator {
     const tempId = cuid();
     const tempImageFileName = `${tempId}_test_image.png`;
     const tempImagePath = path.join(this.config.tempDirPath, tempImageFileName);
-    const useOpenAI = !!process.env.OPENAI_API_KEY;
     const searchPrompt = prompt.replace(/\s+/g, ' ');
-    if (useOpenAI) {
-      try {
-        await this.generateOpenAIImage(searchPrompt, tempImagePath);
-      } catch (error) {
-        logger.warn({ error }, 'OpenAI test image failed, falling back to Pollinations');
-        const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}?width=768&height=1365&model=turbo&nologo=true`;
-        await this.downloadPollinationsImage(pollinationsImageUrl, tempImagePath);
-      }
-    } else {
-      const pollinationsImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(searchPrompt)}?width=768&height=1365&model=turbo&nologo=true`;
-      await this.downloadPollinationsImage(pollinationsImageUrl, tempImagePath);
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required for test image generation');
     }
+    await this.generateOpenAIImage(searchPrompt, tempImagePath);
     return { tmpFile: tempImageFileName };
   }
 
