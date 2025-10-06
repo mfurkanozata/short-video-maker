@@ -115,7 +115,7 @@ export class ShortCreator {
     try {
       // Find the smallest WAV file in temp directory for testing
       const tempDir = this.config.tempDirPath;
-      const wavFiles = fs.readdirSync(tempDir)
+      let wavFiles = fs.readdirSync(tempDir)
         .filter(file => file.endsWith('.wav'))
         .map(file => ({
           name: file,
@@ -124,8 +124,18 @@ export class ShortCreator {
         }))
         .sort((a, b) => a.size - b.size);
 
+      // If none, auto-generate a short silent WAV (0.6s, 16kHz mono) for the health check
       if (wavFiles.length === 0) {
-        throw new Error("No WAV files found for Faster-Whisper testing");
+        const testFilePath = path.join(tempDir, 'test_preflight.wav');
+        const { execSync } = require('child_process');
+        const ffmpegCmd = `ffmpeg -f lavfi -i anullsrc=r=16000:cl=mono -t 0.6 -acodec pcm_s16le -ar 16000 -ac 1 -y "${testFilePath}"`;
+        logger.debug({ testFile: 'test_preflight.wav' }, 'Generating silent WAV for Faster-Whisper pre-flight');
+        try {
+          execSync(ffmpegCmd, { stdio: 'ignore' });
+        } catch (e) {
+          throw new Error('Failed to generate test WAV for Faster-Whisper pre-flight');
+        }
+        wavFiles = [{ name: 'test_preflight.wav', path: testFilePath, size: fs.statSync(testFilePath).size }];
       }
 
       const testWavFile = wavFiles[0];
