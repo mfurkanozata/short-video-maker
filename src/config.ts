@@ -45,6 +45,8 @@ export class Config {
   public port: number;
   public runningInDocker: boolean;
   public devMode: boolean;
+  public openaiDevMode: boolean;
+  public elevenDevMode: boolean;
   public whisperVersion: string = whisperVersion;
   public whisperModel: whisperModels = defaultWhisperModel;
   public kokoroModelPrecision: kokoroModelPrecision = "fp32";
@@ -84,6 +86,8 @@ export class Config {
     this.port = process.env.PORT ? parseInt(process.env.PORT) : defaultPort;
     this.runningInDocker = process.env.DOCKER === "true";
     this.devMode = process.env.DEV_MODE === "true";
+    this.openaiDevMode = process.env.OPENAI_DEV_MODE === "true";
+    this.elevenDevMode = process.env.ELEVEN_DEV_MODE === "true";
 
     if (process.env.WHISPER_MODEL) {
       this.whisperModel = process.env.WHISPER_MODEL as whisperModels;

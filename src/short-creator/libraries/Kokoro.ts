@@ -35,16 +35,21 @@ export class Kokoro {
     const isElevenLabsId = /^[A-Za-z0-9_-]{16,}$/i.test(voiceStr);
     const providedVoiceId = isElevenLabsId ? voiceStr : '';
     const envVoiceId = process.env.ELEVENLABS_VOICE_ID || "";
+    const elevenDevMode = process.env.ELEVEN_DEV_MODE === 'true';
     const elevenVoiceId = providedVoiceId || envVoiceId;
-    const useEleven = !!this.eleven && !!(process.env.ELEVENLABS_API_KEY) && !!elevenVoiceId;
+    
+    // ELEVEN_DEV_MODE: Use any available voice, fallback to default if none specified
+    const finalVoiceId = elevenDevMode && !elevenVoiceId ? "5IRSuKNUc0nJnSPPuxMI" : elevenVoiceId;
+    
+    const useEleven = !!this.eleven && !!(process.env.ELEVENLABS_API_KEY) && (!!finalVoiceId || elevenDevMode);
     if (!useEleven || !this.eleven) {
       throw new Error("ElevenLabs is required but not properly configured (missing API key or voiceId)");
     }
 
-    logger.debug({ text: sanitizedText, voice, language: this.language, elevenVoiceId }, "Using ElevenLabs TTS");
+    logger.debug({ text: sanitizedText, voice, language: this.language, elevenVoiceId: finalVoiceId, elevenDevMode }, "Using ElevenLabs TTS");
     const audio = await this.eleven.synthesize({
       text: sanitizedText,
-      voiceId: elevenVoiceId,
+      voiceId: finalVoiceId,
     });
     const audioLength = await this.calculateAudioDuration(audio);
     return { audio, audioLength };

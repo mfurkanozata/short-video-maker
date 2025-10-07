@@ -43,6 +43,8 @@ services:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_DEV_MODE=${OPENAI_DEV_MODE:-false}
+      - ELEVEN_DEV_MODE=${ELEVEN_DEV_MODE:-false}
       - DEV_MODE=${DEV_MODE:-false}
     ports:
       - "3123:3123"

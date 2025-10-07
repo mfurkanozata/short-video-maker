@@ -198,7 +198,7 @@ export class ShortCreator {
     },
   ): Promise<string> {
     // DEV_MODE: Use existing temp files for quick testing
-    logger.debug({ devMode: this.config.devMode, envDevMode: process.env.DEV_MODE }, "Checking DEV_MODE status");
+    logger.debug({ devMode: this.config.devMode, openaiDevMode: this.config.openaiDevMode, envDevMode: process.env.DEV_MODE }, "Checking DEV_MODE status");
     if (this.config.devMode) {
       logger.debug({ videoId, sceneCount: inputScenes.length }, "DEV_MODE is active, using existing temp files");
       return this.createShortDevMode(videoId, inputScenes, config, skipCaptions, questionVideoData);
@@ -274,10 +274,34 @@ export class ShortCreator {
       // Prefer OpenAI Images for vertical (1080x1920) if OPENAI_API_KEY is provided
       const tempImagePath = tempVideoPath.replace('.mp4', '_image.png');
       const searchPrompt = scene.searchTerms.join(" ").replace(/\s+/g, " ");
-      if (!process.env.OPENAI_API_KEY) {
-        throw new Error("OPENAI_API_KEY is required for image generation");
+      
+      // OPENAI_DEV_MODE: Use existing images instead of generating new ones
+      if (this.config.openaiDevMode) {
+        const existingImageFiles = await this.getExistingTempFiles('*.png');
+        if (existingImageFiles.length > 0) {
+          const randomImageFile = existingImageFiles[Math.floor(Math.random() * existingImageFiles.length)];
+          await fs.copy(randomImageFile, tempImagePath);
+          logger.debug({ 
+            searchTerms: scene.searchTerms,
+            provider: 'existing_image',
+            imageFile: path.basename(randomImageFile),
+            duration: audioLength 
+          }, "Using existing image for OPENAI_DEV_MODE");
+        } else {
+          throw new Error("OPENAI_DEV_MODE is enabled but no existing images found in temp directory");
+        }
+      } else {
+        // Normal mode: Generate new image with OpenAI
+        if (!process.env.OPENAI_API_KEY) {
+          throw new Error("OPENAI_API_KEY is required for image generation");
+        }
+        await this.generateOpenAIImage(searchPrompt, tempImagePath);
+        logger.debug({ 
+          searchTerms: scene.searchTerms,
+          provider: 'openai',
+          duration: audioLength 
+        }, "Generated new image with OpenAI");
       }
-      await this.generateOpenAIImage(searchPrompt, tempImagePath);
       
       const tempVideoFromImagePath = tempVideoPath.replace('.mp4', '_from_image.mp4');
       await this.convertImageToVideo(tempImagePath, tempVideoFromImagePath, audioLength);
