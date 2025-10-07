@@ -687,25 +687,48 @@ export class ShortCreator {
       if (!apiKey) {
         throw new Error('OPENAI_API_KEY not set');
       }
-      // OpenAI Images API compatible request
-      const body = {
-        model: 'gpt-image-1',
-        prompt,
-        size: '1024x1536', // portrait format for GPT-Image-1 (supported sizes: 1024x1024, 1024x1536, 1536x1024)
-        quality: 'high' // GPT-Image-1 supports: auto, high, medium, low
-      };
-      const res = await axios.post('https://api.openai.com/v1/images/generations', body, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        timeout: 180000, // 2 minutes timeout for GPT-Image-1
-      });
-      const b64 = res.data?.data?.[0]?.b64_json as string;
-      if (!b64) throw new Error('OpenAI did not return image');
-      const buffer = Buffer.from(b64, 'base64');
-      fs.writeFileSync(outputPath, buffer);
-      logger.debug({ outputPath, prompt }, 'OpenAI image saved');
+      // Send request; on 400, progressively truncate prompt by removing last keyword each attempt
+      let workingPrompt = prompt;
+      // Ensure we don't loop forever; stop when <= 3 tokens remain
+      const minTokens = 3;
+      // Keep size and quality constant as requested
+      while (true) {
+        try {
+          const body = {
+            model: 'gpt-image-1',
+            prompt: workingPrompt,
+            size: '1024x1536',
+            quality: 'high'
+          };
+          const res = await axios.post('https://api.openai.com/v1/images/generations', body, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            timeout: 180000,
+          });
+          const b64 = res.data?.data?.[0]?.b64_json as string;
+          if (!b64) throw new Error('OpenAI did not return image');
+          const buffer = Buffer.from(b64, 'base64');
+          fs.writeFileSync(outputPath, buffer);
+          logger.debug({ outputPath, prompt: workingPrompt }, 'OpenAI image saved');
+          break;
+        } catch (err: any) {
+          const status = err?.response?.status;
+          if (status === 400) {
+            const tokens = workingPrompt.split(/\s+/);
+            if (tokens.length <= minTokens) {
+              throw err; // too short to truncate further
+            }
+            // remove last keyword and retry
+            tokens.pop();
+            workingPrompt = tokens.join(' ');
+            logger.warn({ status, workingPrompt }, 'OpenAI 400 - truncating prompt and retrying');
+            continue;
+          }
+          throw err;
+        }
+      }
     }, {
       maxAttempts: 5,
       delayMs: 1500,
