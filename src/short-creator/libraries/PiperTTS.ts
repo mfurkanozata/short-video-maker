@@ -279,7 +279,7 @@ export class PiperTTS {
           requestData,
           {
             responseType: "arraybuffer",
-            timeout: 15000, // Increased timeout for larger models
+            timeout: 180000, // 3 minutes timeout for larger models
           }
         );
 

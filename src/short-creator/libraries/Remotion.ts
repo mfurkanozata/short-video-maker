@@ -88,10 +88,10 @@ export class Remotion {
         "Video rendered with Remotion",
       );
     }, {
-      maxAttempts: 2, // Video rendering is expensive, so fewer retries
+      maxAttempts: 3, // More robust retries for transient render failures
       delayMs: 5000,
       backoffMultiplier: 2,
-      maxDelayMs: 15000,
+      maxDelayMs: 60000,
       retryCondition: retryConditions.video
     });
   }

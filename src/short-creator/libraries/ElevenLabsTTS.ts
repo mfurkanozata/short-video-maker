@@ -34,7 +34,7 @@ export class ElevenLabsTTS {
         text,
         voiceId,
         modelId = "eleven_v3",
-        stability = 1,
+        stability = 0.5,
         similarityBoost = 1,
         style = 1.0,
         useSpeakerBoost = true,
@@ -69,7 +69,7 @@ export class ElevenLabsTTS {
           "Content-Type": "application/json",
           Accept: "audio/mpeg",
         },
-        timeout: 30000,
+        timeout: 180000,
       });
 
       if (response.status !== 200) {

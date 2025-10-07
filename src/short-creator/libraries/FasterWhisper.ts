@@ -69,7 +69,7 @@ export class FasterWhisper {
   async checkHealth(): Promise<boolean> {
     for (const url of this.fallbackUrls) {
       try {
-        const response = await axios.get(`${url}/health`, { timeout: 5000 });
+        const response = await axios.get(`${url}/health`, { timeout: 180000 });
         if (response.status === 200) {
           this.serverUrl = url;
           logger.debug({ url, model: response.data.model }, "Faster-Whisper health check passed");
@@ -133,7 +133,7 @@ export class FasterWhisper {
             `${url}/transcribe`,
             requestData,
             {
-              timeout: 120000, // 2 minutes timeout for large audio files
+              timeout: 180000, // 3 minutes timeout for large audio files
               headers: {
                 'Content-Type': 'application/json'
               }
