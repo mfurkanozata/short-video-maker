@@ -719,7 +719,7 @@ export class ShortCreator {
       while (true) {
         try {
           const body = {
-            model: 'gpt-image-1',
+            model: 'gpt-image-1-mini',
             prompt: workingPrompt,
             size: '1024x1536',
             quality: 'high'
