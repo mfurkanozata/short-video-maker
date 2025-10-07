@@ -40,20 +40,25 @@ export class ElevenLabsTTS {
         useSpeakerBoost = true,
       } = options;
 
-      // Use the new endpoint format with output_format parameter
-      // Eleven v3 (alpha) supports 70+ languages with enhanced emotional control
-      const url = `${this.baseUrl}/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+      // Use ElevenLabs text-to-dialogue endpoint
+      // Keep compatibility with existing callers by mapping our options
+      const url = `${this.baseUrl}/text-to-dialogue`;
 
       const payload = {
-        text,
-        model_id: modelId, // eleven_v3 - latest and most advanced model
-        voice_settings: {
+        inputs: [
+          {
+            text,
+            voice_id: voiceId,
+          },
+        ],
+        language_code: "tr",
+        model_id: modelId,
+        settings: {
           stability,
-          similarity_boost: similarityBoost,
-          style,
-          use_speaker_boost: useSpeakerBoost,
+          // Map additional options to equivalent dialogue settings when relevant in future
         },
-      };
+        apply_text_normalization: "on",
+      } as const;
 
       logger.debug({ url, voiceId, modelId }, "Calling ElevenLabs TTS");
 
