@@ -722,7 +722,7 @@ export class ShortCreator {
             model: 'gpt-image-1-mini',
             prompt: workingPrompt,
             size: '1024x1536',
-            quality: 'high'
+            quality: process.env.OPENAI_IMAGE_QUALITY || 'medium'
           };
           const res = await axios.post('https://api.openai.com/v1/images/generations', body, {
             headers: {
